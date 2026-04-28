@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "napari-atlas-stitch"
+version = "0.1.0"
+description = "Atlas stitching widget for ZEISS Volutome and JEOL EM atlas tile workflows in napari"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+  { name = "Wulin Teo" },
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: napari",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Image Processing",
+]
+dependencies = [
+  "napari",
+  "numpy",
+  "ome-zarr>=0.11",
+  "qtpy",
+  "scikit-image",
+  "scipy",
+  "tifffile",
+  "zarr>=3",
+]
+
+[project.urls]
+Homepage = "https://github.com/wulinteousa2-hash/napari-atlas-stitch"
+Repository = "https://github.com/wulinteousa2-hash/napari-atlas-stitch"
+Issues = "https://github.com/wulinteousa2-hash/napari-atlas-stitch/issues"
+
+[project.entry-points."napari.manifest"]
+napari-atlas-stitch = "atlas_stitch:napari.yaml"
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+atlas_stitch = ["napari.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,16 @@
+name: napari-atlas-stitch
+display_name: Atlas Stitch
+description: Atlas stitching widget for ZEISS Volutome and JEOL EM atlas tile workflows
+visibility: public
+categories:
+  - Image Processing
+  - Utilities
+contributions:
+  commands:
+    - id: napari-atlas-stitch.atlas_stitch_widget
+      title: Atlas Stitch
+      python_name: atlas_stitch.widget:atlas_stitch_widget
+
+  widgets:
+    - command: napari-atlas-stitch.atlas_stitch_widget
+      display_name: Atlas Stitch
