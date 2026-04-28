@@ -2,7 +2,7 @@
 
 Standalone napari widget for stitching atlas tile exports from ZEISS Volutome and JEOL EM workflows.
 
-Version: `1.0.0`
+Version: `1.0.1`
 
 `napari-atlas-stitch` parses atlas metadata, checks tile availability, previews nominal/refined/manual tile layouts in napari, estimates refined tile positions from overlaps, supports donor-based seam repair, and exports stitched atlas mosaics as OME-Zarr.
 

@@ -2,6 +2,17 @@
 
 All notable changes to `napari-atlas-stitch` are documented here.
 
+## 1.0.1 - Packaging And Documentation
+
+### Added
+
+- MIT license file for repository and package distributions.
+- Documentation folder placeholder for future user and developer guides.
+
+### Changed
+
+- Bumped package version to `1.0.1`.
+
 ## 1.0.0 - Initial Standalone Release
 
 This is a work-in-progress standalone release. The main Atlas Stitch workflow is available, but many functions still need broader testing and validation on real ZEISS Volutome and JEOL EM datasets.
