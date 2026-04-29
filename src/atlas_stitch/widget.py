@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime
 import math
+import time
 from typing import Any
 
 import numpy as np
@@ -34,7 +35,16 @@ from tifffile import imread
 
 from .models import AtlasExportInfo, AtlasProject, TileRecord, TileTransform
 from .project_state import load_atlas_project, save_atlas_project
-from .refinement_overlap import DEFAULT_ALIGNMENT_METHOD, ROBUST_ALIGNMENT_METHOD, build_neighbor_constraints
+from .refinement_overlap import (
+    DEFAULT_ALIGNMENT_METHOD,
+    ROBUST_ALIGNMENT_METHOD,
+    ROBUST_OUTLIER_ALIGNMENT_METHOD,
+    FEATURE_MATCHING_METHOD,
+    ECC_TRANSLATION_METHOD,
+    CENTER_OUT_CLOCKWISE_METHOD,
+    CENTER_OUT_COUNTERCLOCKWISE_METHOD,
+    build_neighbor_constraints,
+)
 from .refinement_solver import solve_refined_tile_positions
 from .seam_repair import (
     BLEND_MODE_FEATHER,
@@ -260,25 +270,41 @@ class AlignmentWorker(QObject):
     error = Signal(str)
     finished = Signal()
 
-    def __init__(self, project: AtlasProject, method: str):
+    def __init__(self, project: AtlasProject, method: str, min_confidence: float, max_correction_px: float | None):
         super().__init__()
         self.project = project
         self.method = method
+        self.min_confidence = min_confidence
+        self.max_correction_px = max_correction_px
 
     def run(self) -> None:
+        started = time.monotonic()
         try:
             method_label = _alignment_method_label(self.method)
             self.progress.emit(f"Alignment ({method_label}): building neighbor constraints", -1, -1)
             overlap_fraction = _project_overlap_fraction(self.project)
-            constraints = build_neighbor_constraints(self.project, method=self.method, overlap_fraction=overlap_fraction)
+            constraints = build_neighbor_constraints(
+                self.project,
+                method=self.method,
+                overlap_fraction=overlap_fraction,
+                min_confidence=self.min_confidence,
+                max_correction_px=self.max_correction_px,
+                progress_callback=self._handle_pair_progress,
+            )
             self.progress.emit(f"Alignment ({method_label}): solving refined tile positions", -1, -1)
             solved_project = solve_refined_tile_positions(self.project, constraints)
+            solved_project.metadata.extra_metadata["atlas_stitch_registration_elapsed_seconds"] = (
+                time.monotonic() - started
+            )
         except Exception as exc:
             self.error.emit(str(exc))
         else:
             self.completed.emit(solved_project)
         finally:
             self.finished.emit()
+
+    def _handle_pair_progress(self, message: str, current: int | None, total: int | None) -> None:
+        self.progress.emit(message, -1 if current is None else int(current), -1 if total is None else int(total))
 
 
 class RepairWorker(QObject):
@@ -464,11 +490,34 @@ class AtlasStitchWidget(QWidget):
         overlap_row.addWidget(self.overlap_percent_edit, 1)
         register_layout.addLayout(overlap_row)
 
+        max_correction_row = QHBoxLayout()
+        max_correction_row.addWidget(QLabel("Max Correction (px)"))
+        self.max_correction_px_edit = QLineEdit()
+        self.max_correction_px_edit.setPlaceholderText("50")
+        self.max_correction_px_edit.setText("50")
+        self.max_correction_px_edit.setToolTip("Reject an overlap correction if its dx/dy magnitude exceeds this value. Leave blank to disable this limit.")
+        max_correction_row.addWidget(self.max_correction_px_edit, 1)
+        register_layout.addLayout(max_correction_row)
+
+        min_confidence_row = QHBoxLayout()
+        min_confidence_row.addWidget(QLabel("Minimum Confidence"))
+        self.min_confidence_edit = QLineEdit()
+        self.min_confidence_edit.setPlaceholderText("0.20")
+        self.min_confidence_edit.setText("0.20")
+        self.min_confidence_edit.setToolTip("Reject an overlap match below this confidence and fall back to nominal spacing.")
+        min_confidence_row.addWidget(self.min_confidence_edit, 1)
+        register_layout.addLayout(min_confidence_row)
+
         alignment_row = QHBoxLayout()
         alignment_row.addWidget(QLabel("Alignment Method"))
         self.alignment_method_combo = QComboBox()
         self.alignment_method_combo.addItem("Light Translation", DEFAULT_ALIGNMENT_METHOD)
         self.alignment_method_combo.addItem("Robust Translation", ROBUST_ALIGNMENT_METHOD)
+        self.alignment_method_combo.addItem("Robust Translation + Outlier Rejection", ROBUST_OUTLIER_ALIGNMENT_METHOD)
+        self.alignment_method_combo.addItem("Feature Matching (SIFT/ORB)", FEATURE_MATCHING_METHOD)
+        self.alignment_method_combo.addItem("ECC Translation", ECC_TRANSLATION_METHOD)
+        self.alignment_method_combo.addItem("Center-Out Clockwise", CENTER_OUT_CLOCKWISE_METHOD)
+        self.alignment_method_combo.addItem("Center-Out Counterclockwise", CENTER_OUT_COUNTERCLOCKWISE_METHOD)
         self.alignment_method_combo.setToolTip("Choose the registration method, then click the alignment button once.")
         alignment_row.addWidget(self.alignment_method_combo, 1)
         register_layout.addLayout(alignment_row)
@@ -719,6 +768,8 @@ class AtlasStitchWidget(QWidget):
         self.chunk_size_edit.editingFinished.connect(self._save_persistent_ui_state)
         self.preview_downsample_edit.editingFinished.connect(self._save_persistent_ui_state)
         self.overlap_percent_edit.editingFinished.connect(self._save_persistent_ui_state)
+        self.max_correction_px_edit.editingFinished.connect(self._save_persistent_ui_state)
+        self.min_confidence_edit.editingFinished.connect(self._save_persistent_ui_state)
 
         self.build_pyramid_checkbox.toggled.connect(lambda _checked: self._save_persistent_ui_state())
         self.alignment_method_combo.currentIndexChanged.connect(lambda _index: self._save_persistent_ui_state())
@@ -799,6 +850,8 @@ class AtlasStitchWidget(QWidget):
         self.chunk_size_edit.setText(str(settings.value("export/chunk_size", "256", type=str) or "256"))
         self.preview_downsample_edit.setText(str(settings.value("preview/downsample", "8", type=str) or "8"))
         self.overlap_percent_edit.setText(str(settings.value("alignment/overlap_percent", "10", type=str) or "10"))
+        self.max_correction_px_edit.setText(str(settings.value("alignment/max_correction_px", "50", type=str) or "50"))
+        self.min_confidence_edit.setText(str(settings.value("alignment/min_confidence", "0.20", type=str) or "0.20"))
 
         build_pyramid = settings.value("export/build_pyramid", True, type=bool)
         self.build_pyramid_checkbox.setChecked(bool(build_pyramid))
@@ -833,6 +886,8 @@ class AtlasStitchWidget(QWidget):
         settings.setValue("export/chunk_size", self.chunk_size_edit.text().strip() or "256")
         settings.setValue("preview/downsample", self.preview_downsample_edit.text().strip() or "8")
         settings.setValue("alignment/overlap_percent", self.overlap_percent_edit.text().strip() or "10")
+        settings.setValue("alignment/max_correction_px", self.max_correction_px_edit.text().strip())
+        settings.setValue("alignment/min_confidence", self.min_confidence_edit.text().strip() or "0.20")
 
         settings.setValue("export/build_pyramid", bool(self.build_pyramid_checkbox.isChecked()))
         settings.setValue("alignment/method", str(self.alignment_method_combo.currentData() or ""))
@@ -967,6 +1022,12 @@ class AtlasStitchWidget(QWidget):
             return
         if not self._store_processing_settings():
             return
+        min_confidence = self._parse_min_confidence()
+        if min_confidence is None:
+            return
+        max_correction_px = self._parse_max_correction_px()
+        if max_correction_px is False:
+            return
         self.estimate_alignment_button.setEnabled(False)
         self.preview_refined_button.setEnabled(False)
         method = self._selected_alignment_method()
@@ -974,7 +1035,7 @@ class AtlasStitchWidget(QWidget):
         self.progress_label.setText(f"Alignment ({method_label}): queued")
         self._set_progress_busy()
         self._set_status(f"Auto-registration running with {method_label.lower()}.")
-        self._start_alignment_worker(project, method)
+        self._start_alignment_worker(project, method, min_confidence=min_confidence, max_correction_px=max_correction_px)
 
     def _preview_layout(self, placement_mode: str) -> None:
         if self.viewer is None:
@@ -1518,10 +1579,17 @@ class AtlasStitchWidget(QWidget):
         self._preview_thread = thread
         thread.start()
 
-    def _start_alignment_worker(self, project: AtlasProject, method: str) -> None:
+    def _start_alignment_worker(
+        self,
+        project: AtlasProject,
+        method: str,
+        *,
+        min_confidence: float,
+        max_correction_px: float | None,
+    ) -> None:
         self._cleanup_alignment_worker()
         thread = QThread()
-        worker = AlignmentWorker(project, method)
+        worker = AlignmentWorker(project, method, min_confidence, max_correction_px)
         worker.moveToThread(thread)
         worker.progress.connect(self._handle_alignment_progress)
         worker.completed.connect(self._handle_alignment_complete)
@@ -1607,9 +1675,13 @@ class AtlasStitchWidget(QWidget):
         self._populate_tile_table()
         self._refresh_repair_tile_options()
         method_label = _alignment_method_summary_text(self.project.metadata.extra_metadata)
-        self.progress_label.setText(f"Auto-registration complete ({method_label})")
+        elapsed_text = _elapsed_registration_text(self.project.metadata.extra_metadata)
+        complete_text = f"Auto-registration complete ({method_label})"
+        if elapsed_text:
+            complete_text = f"{complete_text} in {elapsed_text}"
+        self.progress_label.setText(complete_text)
         self._set_progress_complete()
-        self._set_status("Auto-registration complete. Review the refined layout and alignment summary before exporting.")
+        self._set_status(_alignment_completion_status(self.project))
 
     def _handle_alignment_error(self, message: str) -> None:
         self.estimate_alignment_button.setEnabled(True)
@@ -1769,6 +1841,34 @@ class AtlasStitchWidget(QWidget):
             return None
         return value
 
+    def _parse_min_confidence(self) -> float | None:
+        text = self.min_confidence_edit.text().strip()
+        if not text:
+            return 0.20
+        try:
+            value = float(text)
+        except ValueError:
+            self._set_status("Minimum confidence must be a number between 0 and 1.")
+            return None
+        if value < 0 or value > 1:
+            self._set_status("Minimum confidence must be between 0 and 1.")
+            return None
+        return value
+
+    def _parse_max_correction_px(self) -> float | None | bool:
+        text = self.max_correction_px_edit.text().strip()
+        if not text:
+            return None
+        try:
+            value = float(text)
+        except ValueError:
+            self._set_status("Max correction px must be a positive number, or blank to disable.")
+            return False
+        if value <= 0:
+            self._set_status("Max correction px must be greater than 0, or blank to disable.")
+            return False
+        return value
+
     def _store_processing_settings(self) -> bool:
         if self.project is None:
             return True
@@ -1778,6 +1878,14 @@ class AtlasStitchWidget(QWidget):
         self.project.metadata.extra_metadata["atlas_stitch_refinement_method"] = self._selected_alignment_method()
         self.project.metadata.extra_metadata["atlas_stitch_overlap_percent"] = overlap_percent
         self.project.metadata.extra_metadata["atlas_stitch_overlap_fraction"] = overlap_percent / 100.0
+        min_confidence = self._parse_min_confidence()
+        if min_confidence is None:
+            return False
+        max_correction_px = self._parse_max_correction_px()
+        if max_correction_px is False:
+            return False
+        self.project.metadata.extra_metadata["atlas_stitch_min_confidence"] = min_confidence
+        self.project.metadata.extra_metadata["atlas_stitch_max_correction_px"] = max_correction_px if max_correction_px is not None else ""
         self.project.metadata.extra_metadata["atlas_stitch_fusion_method"] = self._selected_fusion_method()
         return True
 
@@ -1787,8 +1895,38 @@ class AtlasStitchWidget(QWidget):
         if method == ROBUST_ALIGNMENT_METHOD:
             self.estimate_alignment_button.setText("Run Auto-Registration")
             self.alignment_method_help.setText(
-                "Robust translation tries stronger overlap matching before the global solve. "
+                "Robust translation tests multiple overlap widths before the global solve. "
                 "Use this when light translation leaves visible seam errors."
+            )
+        elif method == ROBUST_OUTLIER_ALIGNMENT_METHOD:
+            self.estimate_alignment_button.setText("Run Auto-Registration")
+            self.alignment_method_help.setText(
+                "Robust translation plus residual outlier rejection removes overlap pairs that disagree with the solved global layout. "
+                "Use this when robust translation is close but a few bad pairs distort the mosaic."
+            )
+        elif method == FEATURE_MATCHING_METHOD:
+            self.estimate_alignment_button.setText("Run Auto-Registration")
+            self.alignment_method_help.setText(
+                "Feature matching uses OpenCV SIFT when available, otherwise ORB, then estimates translation from matched overlap features. "
+                "Use this when phase correlation struggles with sparse or uneven texture."
+            )
+        elif method == ECC_TRANSLATION_METHOD:
+            self.estimate_alignment_button.setText("Run Auto-Registration")
+            self.alignment_method_help.setText(
+                "ECC translation uses OpenCV enhanced correlation alignment on overlap strips. "
+                "Use this as an experimental alternative when feature matching is weak."
+            )
+        elif method == CENTER_OUT_CLOCKWISE_METHOD:
+            self.estimate_alignment_button.setText("Run Auto-Registration")
+            self.alignment_method_help.setText(
+                "Center-out clockwise starts near the middle tile, attaches neighboring tiles outward in clockwise priority, "
+                "and uses a spanning-tree constraint set. Use this when global registration is distorted by weak outer matches."
+            )
+        elif method == CENTER_OUT_COUNTERCLOCKWISE_METHOD:
+            self.estimate_alignment_button.setText("Run Auto-Registration")
+            self.alignment_method_help.setText(
+                "Center-out counterclockwise starts near the middle tile, attaches neighboring tiles outward in counterclockwise priority, "
+                "and uses a spanning-tree constraint set. Try this if clockwise chooses poor early neighbors."
             )
         else:
             self.estimate_alignment_button.setText("Run Auto-Registration")
@@ -1816,6 +1954,12 @@ class AtlasStitchWidget(QWidget):
                     overlap_percent = None
         if overlap_percent not in (None, ""):
             self.overlap_percent_edit.setText(_format_number(float(overlap_percent)))
+        min_confidence = extra.get("atlas_stitch_min_confidence")
+        if min_confidence not in (None, ""):
+            self.min_confidence_edit.setText(_format_number(float(min_confidence)))
+        max_correction_px = extra.get("atlas_stitch_max_correction_px")
+        if max_correction_px not in (None, ""):
+            self.max_correction_px_edit.setText(_format_number(float(max_correction_px)))
         fusion_method = str(extra.get("atlas_stitch_fusion_method") or "").strip()
         if fusion_method:
             fusion_index = self.fusion_method_combo.findData(fusion_method)
@@ -3113,6 +3257,8 @@ def build_project_summary(project: AtlasProject) -> str:
             [
                 f"Refinement method: {_alignment_method_summary_text(extra)}",
                 f"Tile overlap: {_metadata_value_text(extra.get('atlas_stitch_overlap_percent'))} %",
+                f"Minimum confidence: {_metadata_value_text(extra.get('atlas_stitch_min_confidence'))}",
+                f"Max correction px: {_metadata_value_text(extra.get('atlas_stitch_max_correction_px'))}",
                 f"Fusion method: {_metadata_text(extra, 'atlas_stitch_fusion_method') or '(not available)'}",
                 f"Refinement status: {_metadata_text(extra, 'atlas_stitch_refinement_status') or '(not available)'}",
                 f"Neighbor pair count: {_metadata_value_text(extra.get('atlas_stitch_neighbor_pairs_total'))}",
@@ -3122,12 +3268,14 @@ def build_project_summary(project: AtlasProject) -> str:
                 f"Max residual px: {_metadata_value_text(extra.get('atlas_stitch_max_residual_px'))}",
                 f"High-residual pair count: {_metadata_value_text(extra.get('atlas_stitch_high_residual_pair_count'))}",
                 f"Low-confidence pair count: {_low_confidence_pair_count_text(extra)}",
+                f"Auto-registration runtime: {_elapsed_registration_text(extra) or '(not available)'}",
                 f"Constraint count: {_metadata_value_text(extra.get('atlas_stitch_constraint_count'))}",
                 f"Constrained tile count: {_metadata_value_text(extra.get('atlas_stitch_constrained_tile_count'))}",
                 f"Isolated tile count: {_metadata_value_text(extra.get('atlas_stitch_isolated_tile_count'))}",
                 f"Anchor component count: {_metadata_value_text(extra.get('atlas_stitch_anchor_component_count'))}",
                 f"Refined tile count: {_metadata_value_text(extra.get('atlas_stitch_refined_tile_count'))}",
                 f"Neighbor fallback reasons: {_fallback_reason_text(extra.get('atlas_stitch_neighbor_fallback_reasons'))}",
+                f"Neighbor skipped reasons: {_fallback_reason_text(extra.get('atlas_stitch_neighbor_skip_reasons'))}",
             ],
         ),
         (
@@ -3378,6 +3526,48 @@ def _format_export_progress(stage: str, current: int, total: int) -> str:
     return f"Export: {stage}"
 
 
+def _elapsed_registration_text(metadata: dict[str, Any]) -> str:
+    value = metadata.get("atlas_stitch_registration_elapsed_seconds")
+    if value in (None, ""):
+        return ""
+    try:
+        seconds = max(0, int(round(float(value))))
+    except (TypeError, ValueError):
+        return ""
+    return _format_elapsed_seconds(seconds)
+
+
+def _format_elapsed_seconds(seconds: int) -> str:
+    minutes, remaining_seconds = divmod(int(seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    parts: list[str] = []
+    if hours:
+        parts.append(f"{hours} hr")
+    if minutes:
+        parts.append(f"{minutes} min")
+    if remaining_seconds or not parts:
+        parts.append(f"{remaining_seconds} sec")
+    return " ".join(parts)
+
+
+def _alignment_completion_status(project: AtlasProject) -> str:
+    extra = project.metadata.extra_metadata
+    elapsed_text = _elapsed_registration_text(extra)
+    lead = "Auto-registration complete"
+    if elapsed_text:
+        lead = f"{lead} in {elapsed_text}"
+    return (
+        f"{lead}. "
+        f"Pairs: total {_metadata_value_text(extra.get('atlas_stitch_neighbor_pairs_total'))}, "
+        f"accepted {_metadata_value_text(extra.get('atlas_stitch_neighbor_pairs_accepted'))}. "
+        f"Fallbacks: {_fallback_reason_text(extra.get('atlas_stitch_neighbor_fallback_reasons'))}. "
+        f"Skipped: {_fallback_reason_text(extra.get('atlas_stitch_neighbor_skip_reasons'))}. "
+        f"Constrained tiles: {_metadata_value_text(extra.get('atlas_stitch_constrained_tile_count'))}; "
+        f"isolated tiles: {_metadata_value_text(extra.get('atlas_stitch_isolated_tile_count'))}. "
+        "Review the refined layout and alignment summary before exporting."
+    )
+
+
 def _format_number(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
@@ -3438,6 +3628,16 @@ def _alignment_method_label(method: str) -> str:
     value = str(method or "").strip().lower()
     if value == ROBUST_ALIGNMENT_METHOD:
         return "Robust Translation"
+    if value == ROBUST_OUTLIER_ALIGNMENT_METHOD:
+        return "Robust Translation + Outlier Rejection"
+    if value == FEATURE_MATCHING_METHOD:
+        return "Feature Matching"
+    if value == ECC_TRANSLATION_METHOD:
+        return "ECC Translation"
+    if value == CENTER_OUT_CLOCKWISE_METHOD:
+        return "Center-Out Clockwise"
+    if value == CENTER_OUT_COUNTERCLOCKWISE_METHOD:
+        return "Center-Out Counterclockwise"
     return "Light Translation"
 
 

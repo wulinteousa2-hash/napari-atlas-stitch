@@ -2,6 +2,48 @@
 
 All notable changes to `napari-atlas-stitch` are documented here.
 
+## 1.2.0 - Registration Safeguards And Advanced Alignment Modes
+
+This release improves overlap-based alignment refinement for EM tile mosaics by adding stronger registration options, pairwise-quality safeguards, and clearer controls for rejecting unreliable tile matches before global layout optimization.
+
+### Added
+
+- Additional registration modes for neighboring tile overlap alignment:
+  - Light translation registration.
+  - Robust translation registration.
+  - Robust translation with residual-based outlier rejection.
+  - Feature-based registration using SIFT when available, with ORB fallback.
+  - ECC intensity-based translation registration.
+  - Center-out clockwise registration.
+  - Center-out counterclockwise registration.
+- Maximum correction control for rejecting translation corrections larger than the configured pixel limit.
+- Minimum confidence control for rejecting weak pairwise overlap registrations.
+- Metadata tracking for selected registration method, overlap fraction, accepted pairs, fallback pairs, skipped pairs, and outlier rejection results.
+- Center-out seeded registration strategy that starts near the center of the tile grid and expands outward using clockwise or counterclockwise neighbor priority.
+- Residual-based outlier rejection for removing pairwise constraints that disagree with the solved global layout.
+
+### Changed
+
+- Improved auto-registration robustness by filtering implausible or low-confidence pairwise translations before global optimization.
+- Expanded the alignment method selector to expose multiple registration strategies for difficult EM mosaics.
+- Improved registration progress messages so users can see which neighboring tile pair is being processed.
+- Updated README documentation with recommended EM starting settings:
+  - Registration mode: Robust translation with residual-based outlier rejection.
+  - Tile overlap: 10–20%.
+  - Maximum correction: 50 px.
+  - Minimum confidence: 0.20.
+
+### Recommended Starting Settings
+
+For most EM atlas mosaics, start with:
+
+```text
+Registration mode: Robust translation with residual-based outlier rejection
+Tile overlap: 10–20%
+Maximum correction: 50 px
+Minimum confidence: 0.20
+```
+
 ## 1.1.0 - Guided Workflow Refactor
 
 This release reorganizes the Atlas Stitch widget into a clearer workflow for loading atlas sources, inspecting tile layout, running overlap-based registration, applying manual adjustments, and exporting stitched OME-Zarr mosaics.
