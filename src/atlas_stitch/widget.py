@@ -388,6 +388,12 @@ class AtlasStitchWidget(QWidget):
         right_column.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(main_splitter, 1)
 
+        self.workflow_guide_label = QLabel(
+            "Workflow: Load source → Preview nominal → Run auto-registration → Preview refined → Export."
+        )
+        self.workflow_guide_label.setWordWrap(True)
+        left_column.addWidget(self.workflow_guide_label)
+
         input_group = QGroupBox("Input")
         input_layout = QVBoxLayout(input_group)
         xml_row = QHBoxLayout()
@@ -408,6 +414,56 @@ class AtlasStitchWidget(QWidget):
         tile_root_row.addWidget(self.tile_root_browse_button)
         input_layout.addLayout(tile_root_row)
 
+        load_row = QHBoxLayout()
+        self.load_button = QPushButton("Load Source")
+        self.load_project_button = QPushButton("Load Project JSON")
+        self.save_project_button = QPushButton("Save Project JSON")
+        self.load_button.setToolTip("Parse atlas metadata and resolve tile image paths.")
+        load_row.addWidget(self.load_button)
+        load_row.addWidget(self.load_project_button)
+        load_row.addWidget(self.save_project_button)
+        load_row.addStretch(1)
+        input_layout.addLayout(load_row)
+        left_column.addWidget(input_group)
+
+        inspect_group = QGroupBox("Inspect")
+        inspect_layout = QFormLayout(inspect_group)
+        inspect_layout.setLabelAlignment(Qt.AlignLeft)
+        inspect_button_row = QHBoxLayout()
+        self.preview_nominal_button = QPushButton("Preview Nominal Layout")
+        self.clear_preview_button = QPushButton("Clear Preview Layers")
+        self.preview_nominal_button.setToolTip(
+            "Show the layout from stage/grid metadata before registration."
+        )
+        inspect_button_row.addWidget(self.preview_nominal_button)
+        inspect_button_row.addWidget(self.clear_preview_button)
+        inspect_button_row.addStretch(1)
+        inspect_layout.addRow(inspect_button_row)
+
+        table_locate_row = QHBoxLayout()
+        self.grid_position_edit = QLineEdit()
+        self.grid_position_edit.setPlaceholderText("r8 c11")
+        self.grid_position_button = QPushButton("Locate Grid")
+        table_locate_row.addWidget(self.grid_position_edit, 1)
+        table_locate_row.addWidget(self.grid_position_button)
+        inspect_layout.addRow("Locate Grid", table_locate_row)
+
+        self.preview_downsample_edit = QLineEdit()
+        self.preview_downsample_edit.setPlaceholderText("8")
+        self.preview_downsample_edit.setText("8")
+        inspect_layout.addRow("Preview downsample", self.preview_downsample_edit)
+        left_column.addWidget(inspect_group)
+
+        register_group = QGroupBox("Register")
+        register_layout = QVBoxLayout(register_group)
+        overlap_row = QHBoxLayout()
+        overlap_row.addWidget(QLabel("Tile Overlap (%)"))
+        self.overlap_percent_edit = QLineEdit()
+        self.overlap_percent_edit.setPlaceholderText("10")
+        self.overlap_percent_edit.setText("10")
+        overlap_row.addWidget(self.overlap_percent_edit, 1)
+        register_layout.addLayout(overlap_row)
+
         alignment_row = QHBoxLayout()
         alignment_row.addWidget(QLabel("Alignment Method"))
         self.alignment_method_combo = QComboBox()
@@ -415,21 +471,61 @@ class AtlasStitchWidget(QWidget):
         self.alignment_method_combo.addItem("Robust Translation", ROBUST_ALIGNMENT_METHOD)
         self.alignment_method_combo.setToolTip("Choose the registration method, then click the alignment button once.")
         alignment_row.addWidget(self.alignment_method_combo, 1)
-        input_layout.addLayout(alignment_row)
+        register_layout.addLayout(alignment_row)
         self.alignment_method_help = QLabel()
         self.alignment_method_help.setWordWrap(True)
-        input_layout.addWidget(self.alignment_method_help)
+        register_layout.addWidget(self.alignment_method_help)
 
-        overlap_row = QHBoxLayout()
-        overlap_row.addWidget(QLabel("Tile Overlap (%)"))
-        self.overlap_percent_edit = QLineEdit()
-        self.overlap_percent_edit.setPlaceholderText("10")
-        self.overlap_percent_edit.setText("10")
-        overlap_row.addWidget(self.overlap_percent_edit, 1)
-        input_layout.addLayout(overlap_row)
+        register_button_row = QHBoxLayout()
+        self.estimate_alignment_button = QPushButton("Run Auto-Registration")
+        self.preview_refined_button = QPushButton("Preview Refined Layout")
+        self.estimate_alignment_button.setToolTip(
+            "Register overlapping tile pairs and solve a global refined layout."
+        )
+        self.preview_refined_button.setToolTip("Show the optimized layout after auto-registration.")
+        register_button_row.addWidget(self.estimate_alignment_button)
+        register_button_row.addWidget(self.preview_refined_button)
+        register_button_row.addStretch(1)
+        register_layout.addLayout(register_button_row)
+        left_column.addWidget(register_group)
+
+        manual_group = QGroupBox("Manual Adjustment")
+        manual_layout = QHBoxLayout(manual_group)
+        self.preview_manual_button = QPushButton("Preview Manual Layout")
+        self.save_manual_position_button = QPushButton("Save Manual Position")
+        self.save_manual_position_button.setToolTip(
+            "Save the current napari layer position for selected opened tile(s)."
+        )
+        manual_layout.addWidget(self.preview_manual_button)
+        manual_layout.addWidget(self.save_manual_position_button)
+        manual_layout.addStretch(1)
+        left_column.addWidget(manual_group)
+
+        export_group = QGroupBox("Export")
+        export_layout = QFormLayout(export_group)
+        export_layout.setLabelAlignment(Qt.AlignLeft)
+        self.output_folder_edit = QLineEdit()
+        self.output_folder_edit.setPlaceholderText("Select export directory")
+        self.output_folder_browse_button = QPushButton("Browse...")
+        output_folder_row = QHBoxLayout()
+        output_folder_row.addWidget(self.output_folder_edit, 1)
+        output_folder_row.addWidget(self.output_folder_browse_button)
+        export_layout.addRow("Output folder", output_folder_row)
+
+        self.output_name_edit = QLineEdit()
+        self.output_name_edit.setPlaceholderText("Base name (for example atlas)")
+        export_layout.addRow("Output name", self.output_name_edit)
+
+        self.chunk_size_edit = QLineEdit()
+        self.chunk_size_edit.setPlaceholderText("256")
+        self.chunk_size_edit.setText("256")
+        export_layout.addRow("Chunk size", self.chunk_size_edit)
+
+        self.build_pyramid_checkbox = QCheckBox("Build multiscale pyramid")
+        self.build_pyramid_checkbox.setChecked(True)
+        export_layout.addRow("Multiscale", self.build_pyramid_checkbox)
 
         fusion_row = QHBoxLayout()
-        fusion_row.addWidget(QLabel("Fusion Method"))
         self.fusion_method_combo = QComboBox()
         self.fusion_method_combo.addItem("Overwrite", FUSION_OVERWRITE)
         self.fusion_method_combo.addItem("Linear Blend", FUSION_LINEAR_BLEND)
@@ -437,51 +533,36 @@ class AtlasStitchWidget(QWidget):
         self.fusion_method_combo.addItem("Max Intensity", FUSION_MAX)
         self.fusion_method_combo.addItem("Min Intensity", FUSION_MIN)
         fusion_row.addWidget(self.fusion_method_combo, 1)
-        input_layout.addLayout(fusion_row)
+        export_layout.addRow("Fusion method", fusion_row)
 
-        load_row = QHBoxLayout()
-        self.load_button = QPushButton("Load Atlas Source")
-        load_row.addWidget(self.load_button)
-        load_row.addStretch(1)
-        input_layout.addLayout(load_row)
-        left_column.addWidget(input_group)
+        self.export_placement_combo = QComboBox()
+        self.export_placement_combo.addItem("Nominal", "nominal")
+        self.export_placement_combo.addItem("Refined", "refined")
+        self.export_placement_combo.addItem("Manual", "manual")
+        export_layout.addRow("Export placement", self.export_placement_combo)
 
-        action_group = QGroupBox("Actions")
-        action_layout = QHBoxLayout(action_group)
-        self.save_project_button = QPushButton("Save Project")
-        self.load_project_button = QPushButton("Load Project")
-        self.estimate_alignment_button = QPushButton("Estimate Alignment")
-        self.preview_nominal_button = QPushButton("Preview Nominal")
-        self.preview_refined_button = QPushButton("Preview Refined")
-        self.preview_manual_button = QPushButton("Preview Manual")
-        self.save_manual_position_button = QPushButton("Save Current Position")
-        self.clear_preview_button = QPushButton("Clear Preview")
-        self.export_button = QPushButton("Export OME-Zarr")
-        self.open_export_button = QPushButton("Open Export")
+        self.export_worked_only_checkbox = QCheckBox("Export worked/manual tiles only")
+        self.export_worked_only_checkbox.setChecked(False)
+        export_layout.addRow("Export subset", self.export_worked_only_checkbox)
+
+        export_button_row = QHBoxLayout()
+        self.export_button = QPushButton("Export Stitched OME-Zarr")
+        self.open_export_button = QPushButton("Open Last Export")
+        self.export_button.setToolTip("Export the selected placement mode as an OME-Zarr mosaic.")
+        export_button_row.addWidget(self.export_button)
+        export_button_row.addWidget(self.open_export_button)
+        export_button_row.addStretch(1)
+        export_layout.addRow(export_button_row)
         self.export_button.setEnabled(False)
         self.open_export_button.setEnabled(False)
         self.estimate_alignment_button.setEnabled(False)
         self.preview_nominal_button.setEnabled(False)
         self.preview_refined_button.setEnabled(False)
-        for button in (
-            self.save_project_button,
-            self.load_project_button,
-            self.estimate_alignment_button,
-            self.preview_nominal_button,
-            self.preview_refined_button,
-            self.preview_manual_button,
-            self.save_manual_position_button,
-            self.clear_preview_button,
-            self.export_button,
-            self.open_export_button,
-        ):
-            action_layout.addWidget(button)
-        action_layout.addStretch(1)
-        left_column.addWidget(action_group)
+        left_column.addWidget(export_group)
 
-        progress_group = QGroupBox("Progress")
+        progress_group = QGroupBox("Status / Activity")
         progress_layout = QVBoxLayout(progress_group)
-        self.status_label = QLabel("Select an atlas XML file to inspect nominal tile layout.")
+        self.status_label = QLabel("Select an atlas XML or VE-MIF source, then load it to begin.")
         self.status_label.setWordWrap(True)
         self.progress_label = QLabel("Idle")
         self.progress_label.setWordWrap(True)
@@ -504,14 +585,6 @@ class AtlasStitchWidget(QWidget):
 
         table_group = QGroupBox("Tiles")
         table_layout = QVBoxLayout(table_group)
-        table_locate_row = QHBoxLayout()
-        table_locate_row.addWidget(QLabel("Locate Grid"))
-        self.grid_position_edit = QLineEdit()
-        self.grid_position_edit.setPlaceholderText("r8 c11")
-        self.grid_position_button = QPushButton("Locate")
-        table_locate_row.addWidget(self.grid_position_edit, 1)
-        table_locate_row.addWidget(self.grid_position_button)
-        table_layout.addLayout(table_locate_row)
         self.tile_table = QTableWidget(0, 11)
         self.tile_table.setHorizontalHeaderLabels(
             [
@@ -536,9 +609,12 @@ class AtlasStitchWidget(QWidget):
         table_layout.addWidget(self.tile_table)
         right_splitter.addWidget(table_group)
 
-        repair_group = QGroupBox("Seam Repair")
+        repair_group = QGroupBox("Advanced Seam Repair")
         repair_layout = QFormLayout(repair_group)
         repair_layout.setLabelAlignment(Qt.AlignLeft)
+        repair_intro_label = QLabel("Optional: repair damaged tile borders after layout alignment.")
+        repair_intro_label.setWordWrap(True)
+        repair_layout.addRow(repair_intro_label)
         self.repair_target_combo = QComboBox()
         self.repair_target_combo.setEnabled(False)
         repair_layout.addRow("Target tile", self.repair_target_combo)
@@ -598,45 +674,6 @@ class AtlasStitchWidget(QWidget):
         repair_layout.addRow(repair_button_row)
         right_splitter.addWidget(repair_group)
 
-        export_group = QGroupBox("Export Settings")
-        export_layout = QFormLayout(export_group)
-        export_layout.setLabelAlignment(Qt.AlignLeft)
-        self.output_folder_edit = QLineEdit()
-        self.output_folder_edit.setPlaceholderText("Select export directory")
-        self.output_folder_browse_button = QPushButton("Browse...")
-        output_folder_row = QHBoxLayout()
-        output_folder_row.addWidget(self.output_folder_edit, 1)
-        output_folder_row.addWidget(self.output_folder_browse_button)
-        export_layout.addRow("Output folder", output_folder_row)
-
-        self.output_name_edit = QLineEdit()
-        self.output_name_edit.setPlaceholderText("Base name (for example atlas)")
-        export_layout.addRow("Output name", self.output_name_edit)
-
-        self.chunk_size_edit = QLineEdit()
-        self.chunk_size_edit.setPlaceholderText("256")
-        self.chunk_size_edit.setText("256")
-        export_layout.addRow("Chunk size", self.chunk_size_edit)
-
-        self.build_pyramid_checkbox = QCheckBox("Build multiscale pyramid")
-        self.build_pyramid_checkbox.setChecked(True)
-        export_layout.addRow("Multiscale", self.build_pyramid_checkbox)
-
-        self.export_placement_combo = QComboBox()
-        self.export_placement_combo.addItem("Nominal", "nominal")
-        self.export_placement_combo.addItem("Refined", "refined")
-        self.export_placement_combo.addItem("Manual", "manual")
-        export_layout.addRow("Export placement", self.export_placement_combo)
-
-        self.export_worked_only_checkbox = QCheckBox("Export worked/manual tiles only")
-        self.export_worked_only_checkbox.setChecked(False)
-        export_layout.addRow("Export subset", self.export_worked_only_checkbox)
-
-        self.preview_downsample_edit = QLineEdit()
-        self.preview_downsample_edit.setPlaceholderText("8")
-        self.preview_downsample_edit.setText("8")
-        export_layout.addRow("Preview downsample", self.preview_downsample_edit)
-        left_column.addWidget(export_group)
         right_column.addWidget(right_splitter, 1)
         main_splitter.addWidget(left_panel)
         main_splitter.addWidget(right_panel)
@@ -691,6 +728,7 @@ class AtlasStitchWidget(QWidget):
 
         self._load_persistent_ui_state()
         self._update_alignment_method_ui()
+        self._update_refinement_controls()
         self._update_repair_controls()
         self._install_viewer_mouse_menu()
         self._install_viewer_lock_guard()        
@@ -837,8 +875,6 @@ class AtlasStitchWidget(QWidget):
             self._project_path = ""
             self.summary_text.clear()
             self.tile_table.setRowCount(0)
-            self.export_button.setEnabled(False)
-            self.open_export_button.setEnabled(False)
             self._update_refinement_controls()
             self._set_status(f"Failed to load atlas source: {exc}")
             self._reset_progress("Idle")
@@ -856,7 +892,6 @@ class AtlasStitchWidget(QWidget):
         self._clear_repair_preview()
         self._clear_repair_overlap_layer()
         self._clear_preview_layers()
-        self.export_button.setEnabled(True)
         self._update_open_export_enabled()
         self._update_refinement_controls()
         self._update_repair_controls()
@@ -888,7 +923,7 @@ class AtlasStitchWidget(QWidget):
         if self.project.last_export.path:
             self.project.last_export.atlas_project_path = self._project_path
             self._populate_summary()
-        self._set_status("Project saved.")
+        self._set_status("Project JSON saved.")
 
     def _load_project_json(self) -> None:
         selected, _ = QFileDialog.getOpenFileName(self, "Load Atlas Project", "", "JSON Files (*.json)")
@@ -915,7 +950,6 @@ class AtlasStitchWidget(QWidget):
         self._clear_repair_preview()
         self._clear_repair_overlap_layer()
         self._clear_preview_layers()
-        self.export_button.setEnabled(True)
         self._update_open_export_enabled()
         self._update_refinement_controls()
         self._update_repair_controls()
@@ -926,10 +960,10 @@ class AtlasStitchWidget(QWidget):
     def _estimate_alignment(self) -> None:
         project = self.project
         if project is None:
-            self._set_status("Load an atlas project before estimating alignment.")
+            self._set_status("Load a source or project JSON before running auto-registration.")
             return
         if self._alignment_thread and self._alignment_thread.isRunning():
-            self._set_status("Alignment estimation already running.")
+            self._set_status("Auto-registration is already running.")
             return
         if not self._store_processing_settings():
             return
@@ -939,7 +973,7 @@ class AtlasStitchWidget(QWidget):
         method_label = _alignment_method_label(method)
         self.progress_label.setText(f"Alignment ({method_label}): queued")
         self._set_progress_busy()
-        self._set_status(f"Estimating tile alignment with {method_label.lower()}.")
+        self._set_status(f"Auto-registration running with {method_label.lower()}.")
         self._start_alignment_worker(project, method)
 
     def _preview_layout(self, placement_mode: str) -> None:
@@ -961,7 +995,7 @@ class AtlasStitchWidget(QWidget):
         self.preview_refined_button.setEnabled(False)
         self.preview_manual_button.setEnabled(False)
         self.save_manual_position_button.setEnabled(False)
-        mode_label = "Refined" if placement_mode == "refined" else "Nominal"
+        mode_label = _placement_mode_label(placement_mode)
         self.progress_label.setText(f"Preview {mode_label}: queued")
         self._set_progress_busy()
         self._set_status(f"Generating {mode_label.lower()} coarse preview.")
@@ -1356,7 +1390,7 @@ class AtlasStitchWidget(QWidget):
         has_manual = tile.transform.manual_x is not None and tile.transform.manual_y is not None
 
         lock_here_action = menu.addAction("Lock at Current Position")
-        save_action = menu.addAction("Save Current Position")
+        save_action = menu.addAction("Save Manual Position")
         unlock_action = menu.addAction("Unlock Tile")
         clear_action = menu.addAction("Clear Saved Position")
         menu.addSeparator()
@@ -1456,7 +1490,7 @@ class AtlasStitchWidget(QWidget):
         self.export_button.setEnabled(False)
         self.progress_label.setText("Export: queued")
         self._set_progress_busy()
-        self._set_status(f"{placement_mode.title()} OME-Zarr export running.")
+        self._set_status(f"Exporting stitched OME-Zarr using {placement_mode} placement.")
         self._save_persistent_ui_state()
         self._start_export_worker(
             project,
@@ -1529,6 +1563,7 @@ class AtlasStitchWidget(QWidget):
         worker.error.connect(self._handle_export_error)
         worker.finished.connect(thread.quit)
         thread.finished.connect(self._cleanup_export_worker)
+        thread.finished.connect(self._update_refinement_controls)
         thread.started.connect(worker.run)
         self._export_worker = worker
         self._export_thread = thread
@@ -1541,7 +1576,7 @@ class AtlasStitchWidget(QWidget):
     def _handle_preview_ready(self, payload: Any, metadata: dict[str, Any]) -> None:
         if self.viewer is None:
             return
-        mode_label = "Refined" if self._preview_mode == "refined" else "Nominal"
+        mode_label = _placement_mode_label(self._preview_mode)
         self._remove_preview_layer(self._preview_mode)
         layer_name = self._preview_layer_name(self._preview_mode)
         translate = metadata.get("translate", (0.0, 0.0))
@@ -1552,7 +1587,7 @@ class AtlasStitchWidget(QWidget):
         self._update_refinement_controls()
         self.progress_label.setText("Preview complete")
         self._set_progress_complete()
-        self._set_status(f"{mode_label} coarse preview ready.")
+        self._set_status(f"{mode_label} layout preview ready.")
 
     def _handle_preview_error(self, message: str) -> None:
         self._update_refinement_controls()
@@ -1572,16 +1607,16 @@ class AtlasStitchWidget(QWidget):
         self._populate_tile_table()
         self._refresh_repair_tile_options()
         method_label = _alignment_method_summary_text(self.project.metadata.extra_metadata)
-        self.progress_label.setText(f"Alignment estimation complete ({method_label})")
+        self.progress_label.setText(f"Auto-registration complete ({method_label})")
         self._set_progress_complete()
-        self._set_status(f"Alignment estimation complete using {method_label.lower()}.")
+        self._set_status("Auto-registration complete. Review the refined layout and alignment summary before exporting.")
 
     def _handle_alignment_error(self, message: str) -> None:
         self.estimate_alignment_button.setEnabled(True)
         self._update_refinement_controls()
-        self.progress_label.setText(f"Alignment failed: {message}")
-        self._reset_progress(f"Alignment failed: {message}")
-        self._set_status("Alignment estimation failed.")
+        self.progress_label.setText(f"Auto-registration failed: {message}")
+        self._reset_progress(f"Auto-registration failed: {message}")
+        self._set_status("Auto-registration failed. Check tile paths, overlap percent, and alignment method.")
 
     def _handle_export_progress(self, stage: str, current: int, total: int) -> None:
         message = _format_export_progress(stage, current, total)
@@ -1600,7 +1635,7 @@ class AtlasStitchWidget(QWidget):
         self.export_button.setEnabled(True)
         self.progress_label.setText(f"Export complete: {exported_path}")
         self._set_progress_complete()
-        self._set_status(f"{placement_mode.title()} OME-Zarr export finished.")
+        self._set_status("Stitched OME-Zarr export complete. Use Open Last Export to inspect it in napari.")
 
         if self.project is not None:
             exported_tile_ids = None
@@ -1646,7 +1681,7 @@ class AtlasStitchWidget(QWidget):
         self.export_button.setEnabled(True)
         self.progress_label.setText(f"Export failed: {message}")
         self._reset_progress(f"Export failed: {message}")
-        self._set_status("Nominal OME-Zarr export failed.")
+        self._set_status("OME-Zarr export failed. Check output folder, tile paths, and selected placement mode.")
         if self.project is not None and self.project.last_export.path:
             self.project.last_export.status = "failed"
             self._populate_summary()
@@ -1750,13 +1785,13 @@ class AtlasStitchWidget(QWidget):
         method = self._selected_alignment_method()
         method_label = _alignment_method_label(method)
         if method == ROBUST_ALIGNMENT_METHOD:
-            self.estimate_alignment_button.setText("Estimate Alignment (Robust)")
+            self.estimate_alignment_button.setText("Run Auto-Registration")
             self.alignment_method_help.setText(
                 "Robust translation tries stronger overlap matching before the global solve. "
                 "Use this when light translation leaves visible seam errors."
             )
         else:
-            self.estimate_alignment_button.setText("Estimate Alignment (Light)")
+            self.estimate_alignment_button.setText("Run Auto-Registration")
             self.alignment_method_help.setText(
                 "Light translation is the faster, conservative first-pass alignment method."
             )
@@ -2742,7 +2777,7 @@ class AtlasStitchWidget(QWidget):
         self._preview_downsamples.pop(placement_mode, None)
 
     def _preview_layer_name(self, placement_mode: str) -> str:
-        mode_label = "Refined" if placement_mode == "refined" else "Nominal"
+        mode_label = _placement_mode_label(placement_mode)
         return f"{self._preview_prefix} ({mode_label})"
 
     def _render_preview_overlays(self, placement_mode: str) -> None:
@@ -2892,29 +2927,82 @@ class AtlasStitchWidget(QWidget):
         export_path = str(self.project.last_export.path or "").strip()
         self.open_export_button.setEnabled(bool(export_path and Path(export_path).expanduser().exists()))
 
+    def _is_preview_running(self) -> bool:
+        return bool(self._preview_thread and self._preview_thread.isRunning())
+
+    def _is_alignment_running(self) -> bool:
+        return bool(self._alignment_thread and self._alignment_thread.isRunning())
+
+    def _is_export_running(self) -> bool:
+        return bool(self._export_thread and self._export_thread.isRunning())
+
+    def _has_refined_positions(self) -> bool:
+        return bool(
+            self.project is not None
+            and any(tile.transform.refined_x is not None and tile.transform.refined_y is not None for tile in self.project.tiles)
+        )
+
+    def _has_manual_positions(self) -> bool:
+        return bool(
+            self.project is not None
+            and any(tile.transform.manual_x is not None and tile.transform.manual_y is not None for tile in self.project.tiles)
+        )
+
+    def _has_exportable_tiles(self) -> bool:
+        return bool(
+            self.project is not None
+            and any(tile.exists and str(tile.resolved_path or preferred_tile_path(tile) or "").strip() for tile in self.project.tiles)
+        )
+
+    def _has_usable_neighboring_tiles(self) -> bool:
+        if self.project is None:
+            return False
+        usable_by_grid: dict[tuple[int, int], TileRecord] = {}
+        for tile in self.project.tiles:
+            if tile.row is None or tile.col is None:
+                continue
+            if not (tile.exists and str(tile.resolved_path or preferred_tile_path(tile) or "").strip()):
+                continue
+            usable_by_grid[(int(tile.row), int(tile.col))] = tile
+        for row, col in usable_by_grid:
+            if (row, col + 1) in usable_by_grid or (row + 1, col) in usable_by_grid:
+                return True
+        return False
+
     def _update_refinement_controls(self) -> None:
         project = self.project
         has_project = project is not None
-        has_refined = bool(
-            project is not None
-            and any(tile.transform.refined_x is not None and tile.transform.refined_y is not None for tile in project.tiles)
-        )
-        has_manual = bool(
-            project is not None
-            and any(tile.transform.manual_x is not None and tile.transform.manual_y is not None for tile in project.tiles)
-        )
+        preview_running = self._is_preview_running()
+        alignment_running = self._is_alignment_running()
+        export_running = self._is_export_running()
+        has_refined = self._has_refined_positions()
+        has_manual = self._has_manual_positions()
+        has_exportable_tiles = self._has_exportable_tiles()
+        has_usable_neighbors = self._has_usable_neighboring_tiles()
 
-        self.estimate_alignment_button.setEnabled(has_project and not (self._alignment_thread and self._alignment_thread.isRunning()))
-        self.preview_nominal_button.setEnabled(has_project and not (self._preview_thread and self._preview_thread.isRunning()))
+        self.load_button.setEnabled(not alignment_running and not export_running)
+        self.load_project_button.setEnabled(not alignment_running and not export_running)
+        self.save_project_button.setEnabled(has_project and not alignment_running and not export_running)
+
+        self.preview_nominal_button.setEnabled(has_project and not preview_running)
+        self.clear_preview_button.setEnabled(has_project and not preview_running)
+        self.grid_position_button.setEnabled(has_project)
+        self.grid_position_edit.setEnabled(has_project)
+
+        self.estimate_alignment_button.setEnabled(
+            has_project and has_usable_neighbors and not alignment_running and not preview_running and not export_running
+        )
         self.preview_refined_button.setEnabled(
-            has_refined and not (self._preview_thread and self._preview_thread.isRunning()) and not (self._alignment_thread and self._alignment_thread.isRunning())
+            has_refined and not preview_running and not alignment_running
         )
         self.preview_manual_button.setEnabled(
-            has_manual and not (self._preview_thread and self._preview_thread.isRunning())
+            has_manual and not preview_running
         )
         self.save_manual_position_button.setEnabled(
-            has_project and bool(self._opened_tile_layers)
+            has_project and bool(self._opened_tile_layers) and not preview_running and not alignment_running
         )
+        self.export_button.setEnabled(has_project and has_exportable_tiles and not alignment_running and not export_running)
+        self._update_open_export_enabled()
         self._update_repair_controls()
 
     def _cleanup_preview_worker(self) -> None:
@@ -2982,28 +3070,38 @@ def build_project_summary(project: AtlasProject) -> str:
     extra = metadata.extra_metadata
     ignored_count = _metadata_int(extra, "ignored_non_tile_elements")
     duplicate_count = _metadata_int(extra, "duplicate_tile_elements")
+    repaired_count = len([tile for tile in project.tiles if str(tile.repaired_path or "").strip()])
+    manual_count = len(
+        [tile for tile in project.tiles if tile.transform.manual_x is not None and tile.transform.manual_y is not None]
+    )
     sections = [
-        (
-            "Atlas",
-            [
-                f"Atlas name: {metadata.atlas_name or '(unnamed)'}",
-                f"Tiles parsed: {len(project.tiles)}",
-                f"Missing tiles: {len(project.missing_tiles)}",
-                f"Tiles with repaired content: {len([tile for tile in project.tiles if str(tile.repaired_path or '').strip()])}",
-                f"Tiles with saved manual positions: {len([tile for tile in project.tiles if tile.transform.manual_x is not None and tile.transform.manual_y is not None])}",
-            ],
-        ),
         (
             "Source",
             [
+                f"Atlas name: {metadata.atlas_name or '(unnamed)'}",
                 f"Source path: {metadata.xml_path or '(not available)'}",
                 f"Tile root override: {metadata.tile_root_override or '(none)'}",
                 f"Source directory: {metadata.source_directory or '(not available)'}",
                 f"Source software: {_source_software_text(project)}",
+                f"Pixel size: {_pixel_size_text(project)}",
+                f"Pixel size unit: {_pixel_size_unit(project)}",
+                f"Bit depth / bits per sample: {_bit_depth_text(project)}",
+                f"Samples per pixel / channels: {_samples_channels_text(project)}",
             ],
         ),
         (
-            "Dimensions",
+            "Tile validation",
+            [
+                f"Tiles parsed: {len(project.tiles)}",
+                f"Missing tiles: {len(project.missing_tiles)}",
+                f"Tiles with repaired content: {repaired_count}",
+                f"Tile entries used: {len(project.tiles)}",
+                f"Ignored non-tile XML elements: {ignored_count if ignored_count is not None else '(not reported)'}",
+                f"Duplicate tile XML elements ignored: {duplicate_count if duplicate_count is not None else '0'}",
+            ],
+        ),
+        (
+            "Layout / placement",
             [
                 f"Nominal canvas: {_nominal_canvas_text(metadata)}",
                 f"Depth: {_optional_dimension_text(metadata.image_depth)}",
@@ -3011,12 +3109,32 @@ def build_project_summary(project: AtlasProject) -> str:
             ],
         ),
         (
-            "Imaging metadata",
+            "Registration",
             [
-                f"Pixel size: {_pixel_size_text(project)}",
-                f"Pixel size unit: {_pixel_size_unit(project)}",
-                f"Bit depth / bits per sample: {_bit_depth_text(project)}",
-                f"Samples per pixel / channels: {_samples_channels_text(project)}",
+                f"Refinement method: {_alignment_method_summary_text(extra)}",
+                f"Tile overlap: {_metadata_value_text(extra.get('atlas_stitch_overlap_percent'))} %",
+                f"Fusion method: {_metadata_text(extra, 'atlas_stitch_fusion_method') or '(not available)'}",
+                f"Refinement status: {_metadata_text(extra, 'atlas_stitch_refinement_status') or '(not available)'}",
+                f"Neighbor pair count: {_metadata_value_text(extra.get('atlas_stitch_neighbor_pairs_total'))}",
+                f"Accepted pair count: {_metadata_value_text(extra.get('atlas_stitch_neighbor_pairs_accepted'))}",
+                f"Fallback count: {_fallback_count_text(extra.get('atlas_stitch_neighbor_fallback_reasons'))}",
+                f"Mean residual px: {_metadata_value_text(extra.get('atlas_stitch_mean_residual_px'))}",
+                f"Max residual px: {_metadata_value_text(extra.get('atlas_stitch_max_residual_px'))}",
+                f"High-residual pair count: {_metadata_value_text(extra.get('atlas_stitch_high_residual_pair_count'))}",
+                f"Low-confidence pair count: {_low_confidence_pair_count_text(extra)}",
+                f"Constraint count: {_metadata_value_text(extra.get('atlas_stitch_constraint_count'))}",
+                f"Constrained tile count: {_metadata_value_text(extra.get('atlas_stitch_constrained_tile_count'))}",
+                f"Isolated tile count: {_metadata_value_text(extra.get('atlas_stitch_isolated_tile_count'))}",
+                f"Anchor component count: {_metadata_value_text(extra.get('atlas_stitch_anchor_component_count'))}",
+                f"Refined tile count: {_metadata_value_text(extra.get('atlas_stitch_refined_tile_count'))}",
+                f"Neighbor fallback reasons: {_fallback_reason_text(extra.get('atlas_stitch_neighbor_fallback_reasons'))}",
+            ],
+        ),
+        (
+            "Manual adjustments",
+            [
+                f"Tiles with saved manual positions: {manual_count}",
+                f"Worked/manual tile ids: {_manual_tile_ids_text(project)}",
             ],
         ),
         (
@@ -3033,26 +3151,9 @@ def build_project_summary(project: AtlasProject) -> str:
             ],
         ),
         (
-            "Refinement",
+            "Warnings",
             [
-                f"Refinement method: {_alignment_method_summary_text(extra)}",
-                f"Tile overlap: {_metadata_value_text(extra.get('atlas_stitch_overlap_percent'))} %",
-                f"Fusion method: {_metadata_text(extra, 'atlas_stitch_fusion_method') or '(not available)'}",
-                f"Refinement status: {_metadata_text(extra, 'atlas_stitch_refinement_status') or '(not available)'}",
-                f"Constraint count: {_metadata_value_text(extra.get('atlas_stitch_constraint_count'))}",
-                f"Constrained tile count: {_metadata_value_text(extra.get('atlas_stitch_constrained_tile_count'))}",
-                f"Isolated tile count: {_metadata_value_text(extra.get('atlas_stitch_isolated_tile_count'))}",
-                f"Anchor component count: {_metadata_value_text(extra.get('atlas_stitch_anchor_component_count'))}",
-                f"Refined tile count: {_metadata_value_text(extra.get('atlas_stitch_refined_tile_count'))}",
-                f"Neighbor fallback reasons: {_fallback_reason_text(extra.get('atlas_stitch_neighbor_fallback_reasons'))}",
-            ],
-        ),
-        (
-            "Parsing notes / warnings",
-            [
-                f"Tile entries used: {len(project.tiles)}",
-                f"Ignored non-tile XML elements: {ignored_count if ignored_count is not None else '(not reported)'}",
-                f"Duplicate tile XML elements ignored: {duplicate_count if duplicate_count is not None else '0'}",
+                f"Missing tile files: {len(project.missing_tiles)}",
             ]
             + [f"Note: {warning}" for warning in project.warnings],
         ),
@@ -3293,11 +3394,60 @@ def _fallback_reason_text(value: Any) -> str:
     return ", ".join(f"{key}={count}" for key, count in sorted(value.items()))
 
 
+def _fallback_count_text(value: Any) -> str:
+    if not isinstance(value, dict) or not value:
+        return "(not available)"
+    try:
+        return str(sum(int(count) for count in value.values()))
+    except (TypeError, ValueError):
+        return "(not available)"
+
+
+def _low_confidence_pair_count_text(metadata: dict[str, Any]) -> str:
+    explicit = metadata.get("atlas_stitch_low_confidence_pair_count")
+    if explicit not in (None, ""):
+        return str(explicit)
+    skip_reasons = metadata.get("atlas_stitch_neighbor_skip_reasons")
+    fallback_reasons = metadata.get("atlas_stitch_neighbor_fallback_reasons")
+    count = 0
+    found = False
+    for reasons in (skip_reasons, fallback_reasons):
+        if not isinstance(reasons, dict):
+            continue
+        for key, value in reasons.items():
+            if "confidence" not in str(key):
+                continue
+            found = True
+            try:
+                count += int(value)
+            except (TypeError, ValueError):
+                pass
+    return str(count) if found else "(not available)"
+
+
+def _manual_tile_ids_text(project: AtlasProject) -> str:
+    tile_ids = [
+        tile.tile_id
+        for tile in project.tiles
+        if tile.transform.manual_x is not None and tile.transform.manual_y is not None
+    ]
+    return ", ".join(tile_ids) if tile_ids else "(none)"
+
+
 def _alignment_method_label(method: str) -> str:
     value = str(method or "").strip().lower()
     if value == ROBUST_ALIGNMENT_METHOD:
         return "Robust Translation"
     return "Light Translation"
+
+
+def _placement_mode_label(placement_mode: str) -> str:
+    value = str(placement_mode or "").strip().lower()
+    if value == "refined":
+        return "Refined"
+    if value == "manual":
+        return "Manual"
+    return "Nominal"
 
 
 def _next_power_of_two(value: int) -> int:

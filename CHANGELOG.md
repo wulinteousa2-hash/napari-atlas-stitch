@@ -2,6 +2,70 @@
 
 All notable changes to `napari-atlas-stitch` are documented here.
 
+## 1.1.0 - Guided Workflow Refactor
+
+This release reorganizes the Atlas Stitch widget into a clearer workflow for loading atlas sources, inspecting tile layout, running overlap-based registration, applying manual adjustments, and exporting stitched OME-Zarr mosaics.
+
+### Added
+
+- Guided workflow sections in the main widget: Input, Inspect, Register, Manual Adjustment, Export, and Status / Activity.
+- A workflow guide label near the top of the widget: Load source → Preview nominal → Run auto-registration → Preview refined → Export.
+- Clearer button labels and tooltips for the main user actions.
+- A dedicated Inspect section for preview downsample settings and grid lookup.
+- A dedicated Export section for output folder, output name, chunk size, pyramid export, fusion method, placement mode, subset export, export, and open-last-export actions.
+- Centralized button enablement through `_update_refinement_controls` for project-loaded, preview-running, alignment-running, and export-running states.
+- Safer gating for refined and manual previews so those buttons are enabled only when matching positions exist.
+- Auto-registration gating so registration is enabled only when usable neighboring tiles are available.
+- Export gating so export is enabled only when exportable tile files are available.
+
+### Changed
+
+- Replaced the previous crowded Actions group with a step-oriented workflow layout.
+- Renamed the seam repair panel to Advanced Seam Repair and marked it as optional after layout alignment.
+- Moved preview downsample and grid lookup controls from the general action area into Inspect.
+- Moved export controls and open-last-export actions into Export.
+- Kept registration translation-based; this release does not introduce rotation, affine, deformable registration, or bad-pair override UI.
+- Preserved existing backend calls, including `parse_atlas_source`, `build_neighbor_constraints`, `solve_refined_tile_positions`, `export_nominal_layout_to_omezarr`, `save_atlas_project`, and `load_atlas_project`.
+- Preserved public package exports.
+- Preserved export function naming for backward compatibility.
+
+### Seam Repair
+
+- Seam repair algorithms, workers, ROI behavior, donor logic, and save logic were intentionally left unchanged.
+- No changes were made to `RepairDonorSpec`, `TileRepairRequest`, `reconstruct_tile_from_donors`, `save_repair_outputs`, or the repair worker logic.
+
+### Validation
+
+Manual napari validation workflow:
+
+1. Start napari.
+2. Open `Plugins > Atlas Stitch > Atlas Stitch`.
+3. Select an atlas XML or VE-MIF source.
+4. Optionally select a tile-root override.
+5. Click Load Source.
+6. Confirm the tile table and summary populate.
+7. Click Preview Nominal Layout.
+8. Set overlap percent and alignment method.
+9. Click Run Auto-Registration.
+10. Click Preview Refined Layout.
+11. Choose Export placement = Refined.
+12. Click Export Stitched OME-Zarr.
+13. Click Open Last Export.
+
+Additional validation reported for this release:
+
+- Manifest still points to `atlas_stitch.widget:atlas_stitch_widget`.
+- Import smoke check passed in the napari development environment.
+- Offscreen Qt widget smoke check passed.
+- `py_compile` passed for `widget.py`.
+
+### Known Limitations
+
+- No bad-pair override UI is included yet.
+- Residual and high-residual diagnostics are displayed only when metadata exists; this release does not add new diagnostic computation.
+- UI-builder helper extraction was deferred to keep the patch focused and lower risk.
+- Registration remains translation-based only.
+
 ## 1.0.1 - Packaging And Documentation
 
 ### Added
